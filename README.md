@@ -4,6 +4,16 @@ Projeto oficial de agendamento e gestão de barbearia. Repositório inicializado
 
 > **Status: v0.1 / piloto local. Não publicar para clientes ainda.** Serviço, preços, equipe e horários do seed são fictícios. O frontend sozinho abre como prévia e não gera reservas. WhatsApp, pagamento e painel administrativo ainda não foram implementados.
 
+## Testar no navegador
+
+**Prévia visual (sem backend):** https://raw.githack.com/lrm-lgtm/Barberia_Roger/main/docs/index.html
+
+Esse link usa um serviço externo de pré-visualização de HTML; no primeiro acesso pode aparecer uma tela de confirmação do serviço. Não informe dados pessoais reais. Essa prévia não confirma reservas, não envia WhatsApp e não processa pagamentos.
+
+**Endereço oficial após habilitar GitHub Pages:** `https://lrm-lgtm.github.io/Barberia_Roger/`.
+
+Para habilitar: `Settings > Pages > Build and deployment > Deploy from a branch > main > /docs > Save`. O GitHub publicará o conteúdo de `docs/index.html`.
+
 ## Tecnologias
 
 - `frontend/`: React 19, TypeScript, Vite, CSS responsivo.
