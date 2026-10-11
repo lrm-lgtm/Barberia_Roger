@@ -1,0 +1,29 @@
+/* Catálogo de referência V6 — planos em fluxo próprio, fora da agenda avulsa. */
+.v5 .v5-progress{display:block;flex:0 0 85px;width:85px;height:5px;overflow:hidden;border-radius:99px;background:#dce5d7}
+.v5 .v5-progress span{display:block;height:100%;border-radius:99px;background:#3c6644;transition:width .15s ease}
+.v6-plans{margin:16px 0 12px;padding:20px 0 14px;border-top:1px solid #e5eae2}
+.v6-plans-title{display:flex;align-items:end;justify-content:space-between;gap:10px;padding:0 21px 14px}
+.v6-plans-title>div>span{display:block;color:#6e876a;font-size:10px;font-weight:800;letter-spacing:.16em}
+.v6-plans-title h2{margin:5px 0 0;color:#1e3225;font-size:23px;letter-spacing:-.045em}
+.v6-plans-title>span{display:flex;align-items:center;gap:5px;color:#728877;font-size:11px;font-weight:600}
+.v6-plans-rail{display:flex;gap:11px;overflow-x:auto;overscroll-behavior-x:contain;scroll-snap-type:x mandatory;padding:2px 21px 10px;scroll-padding-inline:21px;scrollbar-width:none}
+.v6-plans-rail::-webkit-scrollbar{display:none}
+.v6-plan-card{position:relative;flex:0 0 min(65vw,220px);min-height:172px;display:flex;flex-direction:column;align-items:flex-start;text-align:left;gap:7px;padding:18px;border-radius:20px;border:1px solid #d5e1d5;background:linear-gradient(130deg,#253d2e,#16261e);color:white;scroll-snap-align:start;box-shadow:0 5px 13px #12281b16}
+.v6-plan-card:nth-child(2){background:linear-gradient(135deg,#394933,#1c2d24)}
+.v6-plan-card:nth-child(3){background:linear-gradient(135deg,#65583c,#302e25)}
+.v6-plan-card small{font-size:9px;letter-spacing:.12em;font-weight:800;color:#baceb5}
+.v6-plan-card strong{font-size:19px;letter-spacing:-.03em}
+.v6-plan-benefits{font-size:12px;line-height:1.4;color:#d7e1d2}
+.v6-plan-price{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;margin-top:auto;font-size:20px;font-weight:800}
+.v6-plan-card:focus-visible{outline:3px solid #94be91;outline-offset:3px}
+.v6-plans>p{margin:5px 21px 3px;color:#758477;font-size:11px;line-height:1.5}
+.v6-plan-sheet{max-width:430px;margin:auto;padding-bottom:25px}
+.v6-plan-kicker{display:block;color:#75927a;letter-spacing:.13em;font-size:11px;font-weight:800;margin-top:15px}
+.v6-plan-sheet h2{font-size:30px;letter-spacing:-.05em;margin:6px 0 8px;color:#203326}
+.v6-plan-modal-benefits{font-size:16px;font-weight:700;color:#405f43;margin:0 0 20px}
+.v6-plan-modal-price{font-size:29px;font-weight:850;color:#203c26}
+.v6-plan-modal-price span{font-size:13px;font-weight:400;color:#7a8679}
+.v6-plan-warning{padding:13px 15px;margin:21px 0;border-radius:13px;background:#fff5df;color:#6d5734;font-size:12px;line-height:1.55}
+.v6-plan-close{width:100%;min-height:48px;border:0;border-radius:13px;background:#23432b;color:white;font-size:14px;font-weight:800}
+@media(max-width:360px){.v6-plan-card{flex-basis:69vw}.v6-plans-title h2{font-size:21px}.v5 .v5-progress{flex-basis:65px;width:65px}}
+@media(prefers-reduced-motion:reduce){.v5 .v5-progress span{transition:none}}
