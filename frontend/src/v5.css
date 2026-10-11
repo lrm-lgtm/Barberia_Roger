@@ -29,7 +29,7 @@
 .v5-progress{display:flex;align-items:center;gap:4px}
 .v5-progress span{background:#dce5d7;width:6px;height:6px;border-radius:10px;transition:width .16s}
 .v5-progress span.active{width:23px;background:#3c6644}
-.v5-benefit{margin:0 21px;padding:14px 0;display:flex;align-items:center;gap:9px;border-top:1px solid #edf1e9;color:#5b6c5c;font-size:11px}
+.v5-benefit{margin:0 21px;padding:14px 0;display:flex;flex-wrap:wrap;align-items:center;gap:9px;border-top:1px solid #edf1e9;color:#5b6c5c;font-size:11px}
 .v5-benefit svg{color:#587f5b;flex-shrink:0}
 .v5-benefit>span{color:#b9c7bb}
 .v5-demo-footnote{font-size:10px;color:#9ba79a;padding:0 21px;margin:0 0 4px}
