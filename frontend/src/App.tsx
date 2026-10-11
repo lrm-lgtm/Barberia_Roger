@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { ArrowLeft, ArrowRight, CalendarDays, Check, ChevronLeft, ChevronRight, Clock3, MapPin, Scissors, ShieldCheck, UserRound, Users, X } from 'lucide-react';
 import { api } from './api';
-import { demoCatalog } from './demo';
+import { demoCatalog, demoPlans } from './demo';
 import type { Availability, Booking, Catalog, DayAvailability } from './types';
 import './v4.css';
 import './v5.css';
+import './v6.css';
 
 type Step = 'services' | 'schedule' | 'identify' | 'success';
 const brl = (cents: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(cents / 100);
@@ -55,6 +56,7 @@ export default function App() {
   const dayRailRef = useRef<HTMLDivElement>(null);
   const servicesRailRef = useRef<HTMLDivElement>(null);
   const [serviceIndex, setServiceIndex] = useState(0);
+  const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
   const [calendarMonth, setCalendarMonth] = useState(() => todayInBrazil().slice(0, 7));
 
   useEffect(() => {
@@ -64,6 +66,7 @@ export default function App() {
   }, []);
 
   const service = catalog.services.find(x => x.id === serviceId);
+  const selectedPlan = demoPlans.find(plan => plan.id === selectedPlanId);
   const eligible = catalog.barbers.filter(b => !serviceId || b.service_ids.includes(serviceId));
   const professional = catalog.barbers.find(b => b.id === (booking?.barber_id ?? barberId));
   const dateItems = useMemo(() => Array.from({ length: 30 }, (_, i) => addDays(todayInBrazil(), i)), []);
@@ -201,9 +204,22 @@ export default function App() {
             <div className="service-info"><h3>{s.name}</h3><div><span><Clock3 size={13}/> {s.duration_minutes} min</span><strong>{brl(s.price_cents)}</strong></div></div>
           </button>)}
         </div>
-        <div className="v5-carousel-footer"><div className="v5-progress" aria-hidden="true">{catalog.services.map((s, i) => <span key={s.id} className={serviceIndex === i ? 'active' : ''}/>)}</div><span>{serviceIndex + 1} de {catalog.services.length} · Toque para agendar</span></div>
-        <div className="v5-benefit"><Check size={16}/> Sem instalar aplicativo <span>·</span> Pagamento no local</div>
-        {isPreview && <p className="v5-demo-footnote">Catálogo e valores vistos no InBarber (out/2026), ainda a confirmar. Equipe, fotos e horários não disponíveis nesta demonstração.</p>}
+        <div className="v5-carousel-footer"><div className="v5-progress" aria-hidden="true"><span style={{ width: `${catalog.services.length ? (serviceIndex + 1) / catalog.services.length * 100 : 0}%` }} /></div><span>{serviceIndex + 1} de {catalog.services.length} · Toque para agendar</span></div>
+        <div className="v5-benefit"><Check size={16}/> Sem instalar aplicativo <span>·</span> Escolha um horário em poucos toques</div>
+
+        {isPreview && <section className="v6-plans" aria-label="Planos mensais da Roger Barbearia">
+          <div className="v6-plans-title"><div><span>CLUBE ROGER</span><h2>Planos mensais</h2></div><span>Deslize <ArrowRight size={14}/></span></div>
+          <div className="v6-plans-rail">
+            {demoPlans.map(plan => <button key={plan.id} type="button" className="v6-plan-card" onClick={() => setSelectedPlanId(plan.id)} aria-label={plan.name + ', ' + brl(plan.price_cents) + ' por 30 dias. Ver detalhes.'}>
+              <small>30 DIAS</small>
+              <strong>{plan.name.replace('Plano mensal · ', '')}</strong>
+              <span className="v6-plan-benefits">{plan.benefits}</span>
+              <span className="v6-plan-price">{brl(plan.price_cents)}<ArrowRight size={17}/></span>
+            </button>)}
+          </div>
+          <p>Planos informativos: contratação, regras e disponibilidade ainda serão configuradas.</p>
+        </section>}
+        {isPreview && <p className="v5-demo-footnote">Preços e durações transcritos de capturas do InBarber (out/2026), sujeitos a confirmação. Imagens, horários e equipe ainda não são oficiais.</p>}
       </>}
 
       {step === 'schedule' && service && <div className="v4-schedule">
@@ -251,6 +267,18 @@ export default function App() {
 
       {step === 'success' && service && (isPreview || booking) && <div className="success-screen"><div className="success-check"><Check size={40}/></div><span className="eyebrow">{isPreview ? 'FIM DA DEMONSTRAÇÃO' : 'AGENDAMENTO CONFIRMADO'}</span><h1>{isPreview ? 'Tudo certo no teste!' : 'Te esperamos!'}</h1><p>{isPreview ? 'Essa foi só uma simulação. Nenhuma reserva foi feita e nenhum dado pessoal foi enviado.' : 'Seu horário foi reservado no sistema local de teste.'}</p><div className="booking-summary"><span className="eyebrow">{isPreview ? 'PRÉVIA' : `RESERVA ${booking?.id.slice(0, 8).toUpperCase()}`}</span><h2>{service.name}</h2><div><CalendarDays size={17}/>{dateFmt(date, { weekday: 'long', day: 'numeric', month: 'long' })} · {selectedTime}</div><div><UserRound size={17}/>{isPreview ? (barberId === 'any' ? 'Qualquer barbeiro' : professional?.name) : catalog.barbers.find(b => b.id === booking?.barber_id)?.name}</div><strong>{brl(service.price_cents)}</strong></div><button className="confirm-button" type="button" onClick={() => { setStep('services'); setServiceId(null); setSelectedTime(null); setBooking(null); }}>Testar outro serviço <ArrowRight size={18}/></button></div>}
 
+
+      {isPreview && selectedPlan && <div className="calendar-overlay" onClick={() => setSelectedPlanId(null)}>
+        <div className="calendar-sheet v6-plan-sheet" role="dialog" aria-modal="true" aria-label={'Detalhes do ' + selectedPlan.name} onClick={e => e.stopPropagation()}>
+          <div className="sheet-head"><strong>Clube Roger</strong><button type="button" onClick={() => setSelectedPlanId(null)} aria-label="Fechar detalhes do plano"><X size={20}/></button></div>
+          <span className="v6-plan-kicker">PLANO MENSAL · 30 DIAS</span>
+          <h2>{selectedPlan.name.replace('Plano mensal · ', '')}</h2>
+          <p className="v6-plan-modal-benefits">{selectedPlan.benefits}</p>
+          <div className="v6-plan-modal-price">{brl(selectedPlan.price_cents)}<span> / plano</span></div>
+          <p className="v6-plan-warning">Condições extraídas dos prints do InBarber, ainda não conferidas com a barbearia. Esta demonstração não permite contratar, pagar ou agendar serviços do plano.</p>
+          <button type="button" className="v6-plan-close" onClick={() => setSelectedPlanId(null)}>Voltar aos serviços</button>
+        </div>
+      </div>}
       {fullCalendar && <div className="calendar-overlay" role="presentation" onClick={() => setFullCalendar(false)}>
         <div className="calendar-sheet v5-calendar-sheet" role="dialog" aria-modal="true" aria-label="Escolher data" onClick={e => e.stopPropagation()}>
           <div className="sheet-head"><strong>Escolha a data</strong><button onClick={() => setFullCalendar(false)} aria-label="Fechar calendário" type="button"><X size={19}/></button></div>
