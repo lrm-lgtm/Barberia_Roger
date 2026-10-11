@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
-import { ArrowLeft, ArrowRight, CalendarDays, Check, Clock3, MapPin, Scissors, ShieldCheck, UserRound, Users, X } from 'lucide-react';
+import { ArrowLeft, ArrowRight, CalendarDays, Check, ChevronLeft, ChevronRight, Clock3, MapPin, Scissors, ShieldCheck, UserRound, Users, X } from 'lucide-react';
 import { api } from './api';
 import { demoCatalog } from './demo';
 import type { Availability, Booking, Catalog, DayAvailability } from './types';
 import './v4.css';
+import './v5.css';
 
 type Step = 'services' | 'schedule' | 'identify' | 'success';
 const brl = (cents: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(cents / 100);
@@ -51,7 +52,10 @@ export default function App() {
   const [clientPhone, setClientPhone] = useState('');
   const [marketingOptIn, setMarketingOptIn] = useState(false);
   const [booking, setBooking] = useState<Booking | null>(null);
-  const calendarRef = useRef<HTMLInputElement>(null);
+  const dayRailRef = useRef<HTMLDivElement>(null);
+  const servicesRailRef = useRef<HTMLDivElement>(null);
+  const [serviceIndex, setServiceIndex] = useState(0);
+  const [calendarMonth, setCalendarMonth] = useState(() => todayInBrazil().slice(0, 7));
 
   useEffect(() => {
     // The published preview is intentionally disconnected from the API.
@@ -63,6 +67,19 @@ export default function App() {
   const eligible = catalog.barbers.filter(b => !serviceId || b.service_ids.includes(serviceId));
   const professional = catalog.barbers.find(b => b.id === (booking?.barber_id ?? barberId));
   const dateItems = useMemo(() => Array.from({ length: 30 }, (_, i) => addDays(todayInBrazil(), i)), []);
+  const dayAvailability = useMemo(() => new Map(daysSummary.map(item => [item.date, item.available])), [daysSummary]);
+  const initialMonth = dateItems[0].slice(0, 7);
+  const lastMonth = dateItems[dateItems.length - 1].slice(0, 7);
+  const shiftMonth = (month: string, delta: number) => {
+    const [year, monthIndex] = month.split('-').map(Number);
+    return new Date(Date.UTC(year, monthIndex - 1 + delta, 1)).toISOString().slice(0, 7);
+  };
+  const calendarDates = useMemo(() => {
+    const [year, month] = calendarMonth.split('-').map(Number);
+    const start = (new Date(Date.UTC(year, month - 1, 1)).getUTCDay() + 6) % 7;
+    const days = new Date(Date.UTC(year, month, 0)).getUTCDate();
+    return [...Array.from({ length: start }, () => ''), ...Array.from({ length: days }, (_, i) => `${calendarMonth}-${pad(i + 1)}`)];
+  }, [calendarMonth]);
 
   useEffect(() => {
     if (step !== 'schedule' || !serviceId) return;
@@ -107,6 +124,14 @@ export default function App() {
     return () => { active = false; };
   }, [serviceId, date, barberId, step, isPreview]);
 
+  useEffect(() => {
+    if (step !== 'schedule') return;
+    const rail = dayRailRef.current;
+    const target = rail?.querySelector<HTMLButtonElement>('[aria-pressed="true"]');
+    if (!rail || !target) return;
+    rail.scrollTo({ left: Math.max(0, target.offsetLeft - rail.offsetLeft - (rail.clientWidth - target.clientWidth) / 2), behavior: 'smooth' });
+  }, [date, step, daysSummary]);
+
   function selectService(id: string) {
     setServiceId(id); setBarberId('any'); setSelectedTime(null); setDaysSummary([]);
     setShowMore(false); setStep('schedule'); setError(null);
@@ -114,15 +139,16 @@ export default function App() {
   }
   function changeDay(day: string) {
     if (!day) return;
-    setDate(day); setSelectedTime(null); setShowMore(false); setError(null);
+    if (dayAvailability.get(day) === false || day < dateItems[0] || day > dateItems[dateItems.length - 1]) return;
+    setDate(day); setSelectedTime(null); setAvailability(null); setLoadingSlots(true); setShowMore(false); setError(null);
     setFullCalendar(false);
   }
   function changeBarber(id: string) {
-    setBarberId(id); setSelectedTime(null); setShowMore(false); setShowBarbers(false); setError(null);
+    setBarberId(id); setSelectedTime(null); setAvailability(null); setLoadingSlots(true); setShowMore(false); setShowBarbers(false); setError(null);
   }
   function back() { setStep(step === 'identify' ? 'schedule' : 'services'); setError(null); window.scrollTo({top: 0, behavior: 'instant'}); }
   function pickTime(time: string) {
-    if (loadingSlots || loadingDays) return;
+    if (loadingSlots || loadingDays || !slots.some(slot => slot.time === time)) return;
     setSelectedTime(time); setError(null); setStep('identify');
     window.scrollTo({ top: 0, behavior: 'instant' });
   }
@@ -146,45 +172,47 @@ export default function App() {
   const slots = availability?.slots ?? [];
   const visibleSlots = showMore ? slots : slots.slice(0, 9);
 
-  return <div className="app-shell v4">
+  return <div className="app-shell v4 v5">
     <div className="app-width">
       <header className="site-header">
         <div className="brand-icon"><Scissors size={24} strokeWidth={1.6} /></div>
         <div className="brand-text"><strong>ROGER</strong><span>BARBEARIA</span></div>
         <div className="header-status"><span className="pulse" /> {isPreview ? 'Demonstração' : 'Agenda online'}</div>
       </header>
-      {isPreview && <div className="demo-banner"><ShieldCheck size={15}/> Demonstração: horários simulados. Nenhuma reserva será criada.</div>}
+      {isPreview && <div className="demo-banner"><ShieldCheck size={15}/> Modo demonstração · sem reservas reais</div>}
 
       {step === 'services' && <>
-        <section className="hero">
-          <div className="hero-glow"/><div className="hero-outline"/>
-          <div className="hero-kicker"><span/> SEU ESTILO. SEU MOMENTO.</div>
-          <h1>Seu próximo corte<br/><em>começa aqui.</em></h1>
-          <p>Escolha o serviço, encontre um horário e pronto. Simples assim.</p>
-          <div className="hero-bottom"><span><Clock3 size={15}/> Reserve em poucos toques</span><ArrowRight size={20}/></div>
+        <section className="v5-intro">
+          <span className="eyebrow"><span className="v5-signal"/> AGENDAMENTO ONLINE</span>
+          <h1>Qual vai ser <em>o corte?</em></h1>
+          <p>Deslize, escolha seu serviço e encontre um horário.</p>
         </section>
-        <section className="catalog-heading">
-          <div><span className="eyebrow">AGENDAMENTO</span><h2>Qual vai ser o corte?</h2><p>Deslize para escolher.</p></div>
-          <span className="swipe-hint">Deslize <ArrowRight size={15}/></span>
-        </section>
-        <div className="service-carousel" aria-label="Serviços disponíveis">
-          {catalog.services.map((s, i) => <button type="button" className={`service-card service-art-${i % 4}`} key={s.id} onClick={() => selectService(s.id)}>
-            <div className="service-photo">{s.image_url ? <img src={s.image_url} alt="" loading="lazy"/> : <div className={`graphic graphic-${serviceGraphic[i % 4]}`}><Scissors size={62} strokeWidth={0.8}/><span>{pad(i + 1)}</span></div>}
-              <span className="service-number">0{i + 1}</span><span className="service-float"><ArrowRight size={20}/></span>
+        <div className="v5-carousel-title"><strong>Serviços</strong><span>DESLIZE <ArrowRight size={14}/></span></div>
+        <div className="service-carousel" ref={servicesRailRef} onScroll={event => {
+          const target = event.currentTarget;
+          const first = target.querySelector<HTMLElement>('.service-card');
+          if (!first) return;
+          const width = first.offsetWidth + 14;
+          setServiceIndex(Math.max(0, Math.min(catalog.services.length - 1, Math.round(target.scrollLeft / width))));
+        }} aria-label="Serviços disponíveis. Deslize horizontalmente.">
+          {catalog.services.map((s, i) => <button type="button" className={`service-card service-art-${i % 4}`} key={s.id} onClick={() => selectService(s.id)} aria-label={`${s.name}, ${s.duration_minutes} minutos, ${brl(s.price_cents)}. Escolher horário.`}>
+            <div className="service-photo">{s.image_url ? <img src={s.image_url} alt="" loading="lazy"/> : <div className={`graphic graphic-${serviceGraphic[i % 4]}`}><Scissors size={58} strokeWidth={0.9}/><span>{pad(i + 1)}</span></div>}
+              <span className="service-number">0{i + 1}</span><span className="service-float"><ArrowRight size={19}/></span>
             </div>
-            <div className="service-info"><div><h3>{s.name}</h3><span><Clock3 size={13}/> {s.duration_minutes} min</span></div><strong>{brl(s.price_cents)}</strong></div>
+            <div className="service-info"><h3>{s.name}</h3><div><span><Clock3 size={13}/> {s.duration_minutes} min</span><strong>{brl(s.price_cents)}</strong></div></div>
           </button>)}
         </div>
-        <div className="below-carousel"><span className="line"/><span>Toque em um serviço para escolher o horário</span><span className="line"/></div>
-        <div className="bottom-note"><ShieldCheck size={17}/> Sem instalar aplicativo. {isPreview ? 'Serviços e preços ilustrativos.' : 'Reserve diretamente com a barbearia.'}</div>
+        <div className="v5-carousel-footer"><div className="v5-progress" aria-hidden="true">{catalog.services.map((s, i) => <span key={s.id} className={serviceIndex === i ? 'active' : ''}/>)}</div><span>{serviceIndex + 1} de {catalog.services.length} · Toque para agendar</span></div>
+        <div className="v5-benefit"><Check size={16}/> Sem instalar aplicativo <span>·</span> Pagamento no local</div>
+        {isPreview && <p className="v5-demo-footnote">Serviços, profissionais, preços e horários ilustrativos.</p>}
       </>}
 
       {step === 'schedule' && service && <div className="v4-schedule">
         <div className="v4-nav"><button onClick={back} aria-label="Voltar para serviços" type="button"><ArrowLeft size={20}/></button><span>AGENDAMENTO</span></div>
         <h1>Escolha seu horário</h1>
         <div className="v4-service-summary"><span><strong>{service.name}</strong><small>{service.duration_minutes} min · {brl(service.price_cents)}</small></span><button type="button" onClick={back}>Trocar</button></div>
-        <div className="v4-month"><strong>{dateFmt(date, { month: 'long', year: 'numeric' })}</strong><button type="button" onClick={() => setFullCalendar(true)} aria-label="Abrir calendário mensal"><CalendarDays size={18}/><span>Outras datas</span></button></div>
-        <div className="v4-day-rail" aria-label="Escolha o dia. Deslize horizontalmente.">
+        <div className="v4-month"><strong>{dateFmt(date, { month: 'long', year: 'numeric' })}</strong><button type="button" onClick={() => { setCalendarMonth(date.slice(0, 7)); setFullCalendar(true); }} aria-label="Abrir calendário mensal"><CalendarDays size={18}/><span>Outras datas</span></button></div>
+        <div ref={dayRailRef} className="v4-day-rail" aria-label="Escolha o dia. Deslize horizontalmente.">
           {dateItems.map(day => {
             const item = daysSummary.find(d => d.date === day);
             const unavailable = item ? !item.available : sunday(day);
@@ -224,7 +252,21 @@ export default function App() {
 
       {step === 'success' && service && (isPreview || booking) && <div className="success-screen"><div className="success-check"><Check size={40}/></div><span className="eyebrow">{isPreview ? 'FIM DA DEMONSTRAÇÃO' : 'AGENDAMENTO CONFIRMADO'}</span><h1>{isPreview ? 'Tudo certo no teste!' : 'Te esperamos!'}</h1><p>{isPreview ? 'Essa foi só uma simulação. Nenhuma reserva foi feita e nenhum dado pessoal foi enviado.' : 'Seu horário foi reservado no sistema local de teste.'}</p><div className="booking-summary"><span className="eyebrow">{isPreview ? 'PRÉVIA' : `RESERVA ${booking?.id.slice(0, 8).toUpperCase()}`}</span><h2>{service.name}</h2><div><CalendarDays size={17}/>{dateFmt(date, { weekday: 'long', day: 'numeric', month: 'long' })} · {selectedTime}</div><div><UserRound size={17}/>{isPreview ? (barberId === 'any' ? 'Qualquer barbeiro' : professional?.name) : catalog.barbers.find(b => b.id === booking?.barber_id)?.name}</div><strong>{brl(service.price_cents)}</strong></div><button className="confirm-button" type="button" onClick={() => { setStep('services'); setServiceId(null); setSelectedTime(null); setBooking(null); }}>Testar outro serviço <ArrowRight size={18}/></button></div>}
 
-      {fullCalendar && <div className="calendar-overlay" role="dialog" aria-modal="true" aria-label="Escolher data" onClick={() => setFullCalendar(false)}><div className="calendar-sheet" onClick={e => e.stopPropagation()}><div className="sheet-head"><strong>Escolher outra data</strong><button onClick={() => setFullCalendar(false)} aria-label="Fechar" type="button"><X size={19}/></button></div><p>Selecione uma data nos próximos 30 dias.</p><input ref={calendarRef} type="date" min={dateItems[0]} max={dateItems[dateItems.length - 1]} value={date} onChange={e => changeDay(e.target.value)}/><button className="sheet-done" type="button" onClick={() => calendarRef.current?.showPicker?.()}>Abrir calendário <CalendarDays size={16}/></button></div></div>}
+      {fullCalendar && <div className="calendar-overlay" role="presentation" onClick={() => setFullCalendar(false)}>
+        <div className="calendar-sheet v5-calendar-sheet" role="dialog" aria-modal="true" aria-label="Escolher data" onClick={e => e.stopPropagation()}>
+          <div className="sheet-head"><strong>Escolha a data</strong><button onClick={() => setFullCalendar(false)} aria-label="Fechar calendário" type="button"><X size={19}/></button></div>
+          <div className="v5-calendar-toolbar">
+            <button type="button" aria-label="Mês anterior" disabled={calendarMonth <= initialMonth} onClick={() => setCalendarMonth(m => shiftMonth(m, -1))}><ChevronLeft size={19}/></button>
+            <strong>{dateFmt(`${calendarMonth}-01`, { month: 'long', year: 'numeric' })}</strong>
+            <button type="button" aria-label="Próximo mês" disabled={calendarMonth >= lastMonth} onClick={() => setCalendarMonth(m => shiftMonth(m, 1))}><ChevronRight size={19}/></button>
+          </div>
+          <div className="v5-calendar-grid" role="group" aria-label="Dias disponíveis">
+            {['Seg','Ter','Qua','Qui','Sex','Sáb','Dom'].map(d => <span key={d} className="v5-weekday">{d}</span>)}
+            {calendarDates.map((day, i) => day ? <button type="button" key={day} disabled={!dateItems.includes(day) || dayAvailability.get(day) !== true} className={date === day ? 'selected' : ''} aria-pressed={date === day} onClick={() => changeDay(day)} aria-label={`${dateFmt(day,{weekday:'long',day:'numeric',month:'long'})}${dayAvailability.get(day) === false ? ', sem vaga' : ''}`}>{Number(day.slice(-2))}</button> : <span key={`empty-${i}`} />)}
+          </div>
+          <p className="v5-calendar-note">Dias apagados não têm vagas ou estão fora do período de agendamento.</p>
+        </div>
+      </div>}
       {showBarbers && <div className="calendar-overlay" role="dialog" aria-modal="true" aria-label="Escolher barbeiro" onClick={() => setShowBarbers(false)}><div className="calendar-sheet v4-barber-sheet" onClick={e => e.stopPropagation()}><div className="sheet-head"><strong>Com quem prefere cortar?</strong><button onClick={() => setShowBarbers(false)} aria-label="Fechar" type="button"><X size={19}/></button></div><div className="v4-barber-options"><button type="button" className={barberId === 'any' ? 'active' : ''} onClick={() => changeBarber('any')}><Users size={20}/> Primeiro disponível {barberId === 'any' && <Check size={17}/>}</button>{eligible.map(b => <button type="button" className={barberId === b.id ? 'active' : ''} key={b.id} onClick={() => changeBarber(b.id)}><UserRound size={20}/>{b.name}{barberId === b.id && <Check size={17}/>}</button>)}</div></div></div>}
       <footer className="site-footer"><span>ROGER BARBEARIA</span><span><MapPin size={13}/> Seu lugar, seu estilo.</span></footer>
     </div>
