@@ -177,9 +177,8 @@ export default function App() {
       <header className="site-header">
         <div className="brand-icon"><Scissors size={24} strokeWidth={1.6} /></div>
         <div className="brand-text"><strong>ROGER</strong><span>BARBEARIA</span></div>
-        <div className="header-status"><span className="pulse" /> {isPreview ? 'Demonstração' : 'Agenda online'}</div>
+        <div className="header-status"><span className="pulse" /> {isPreview ? 'Prévia' : 'Agenda online'}</div>
       </header>
-      {isPreview && <div className="demo-banner"><ShieldCheck size={15}/> Modo demonstração · sem reservas reais</div>}
 
       {step === 'services' && <>
         <section className="v5-intro">
