@@ -2,13 +2,13 @@
 
 Projeto oficial de agendamento e gestão de barbearia. Repositório inicializado com a primeira versão executável do **fluxo de cliente mobile-first**: carrossel horizontal de serviços, seleção opcional de profissional, datas, horários e confirmação pela API local.
 
-> **Status: v0.1 / piloto local. Não publicar para clientes ainda.** Serviço, preços, equipe e horários do seed são fictícios. O frontend sozinho abre como prévia e não gera reservas. WhatsApp, pagamento e painel administrativo ainda não foram implementados.
+> **Status: v0.1 / piloto local. Não publicar para clientes ainda.** Serviço, preços, equipe e horários do seed são fictícios. A demonstração pública mostra horários simulados e percorre a jornada sem coletar dados pessoais ou gerar reservas. WhatsApp, pagamento e painel administrativo ainda não foram implementados.
 
 ## Testar no navegador
 
-**Prévia visual (sem backend):** https://raw.githack.com/lrm-lgtm/Barberia_Roger/main/docs/index.html
+**Testar V4 no celular (sem backend):** https://raw.githack.com/lrm-lgtm/Barberia_Roger/main/docs/index.html
 
-Esse link usa um serviço externo de pré-visualização de HTML; no primeiro acesso pode aparecer uma tela de confirmação do serviço. Não informe dados pessoais reais. Essa prévia não confirma reservas, não envia WhatsApp e não processa pagamentos.
+O workflow `publish-preview.yml` compila o mesmo frontend React em modo `VITE_DEMO_MODE=true` e salva os arquivos em `docs/`; assim o link de teste não usa uma interface paralela. Esse link usa um serviço externo de pré-visualização de HTML; no primeiro acesso pode aparecer uma tela de confirmação do serviço. A V4 oferece horários fictícios e simulação de conclusão sem perguntar nome/telefone, sem criar reservas, enviar WhatsApp ou processar pagamentos.
 
 **Endereço oficial após habilitar GitHub Pages:** `https://lrm-lgtm.github.io/Barberia_Roger/`.
 
@@ -61,4 +61,4 @@ cd ../frontend && npm run build
 - Horários demonstrativos são iguais para todos os barbeiros (seg-sáb 09–18h, almoço 12–13h). Escalas reais são fase posterior.
 - Mensagens WhatsApp e pagamentos **não** são enviados.
 
-Leia [o plano completo](docs/PLANO.md) para o backlog e decisões pendentes.
+Leia [o plano completo](docs/PLANO.md) e [o plano da experiência V4](docs/PLANO_UX_V4.md) para o backlog e decisões pendentes.
