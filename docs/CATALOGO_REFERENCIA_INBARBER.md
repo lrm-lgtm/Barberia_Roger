@@ -30,3 +30,38 @@ Transcrição de capturas enviadas pelo usuário. Valores e durações extraído
 - Equipe e expediente semanal não aparecem. As vagas de 10 e 13/10/2026 são pontuais; não equivalem a escala, disponibilidade atual nem autorização para lançar reservas.
 - Esta versão altera apenas dados da prévia React; não altera backend, banco de produção, mensagens ou reservas.
 - Antes da produção confirmar serviço ativo, nomes, preços, duração, profissionais habilitados, intervalos e imagens.
+
+
+## Complemento das capturas de 11/10/2026
+
+Foram identificados **7 serviços avulsos** (somados aos 16 anteriores, total 23) e **3 planos mensais**, que não são agendamentos avulsos.
+
+| Serviço | Preço mostrado | Duração | Captura |
+|---|---:|---:|---|
+| Corte de cabelo simples | R$ 40,00 | 30 min | 1001684888.jpg |
+| Corte Degrade | R$ 40,00 | 30 min | 1001684888.jpg |
+| Barba | R$ 40,00 | 30 min | 1001684890.jpg |
+| Corte & Barba (Combo Bronze) | R$ 70,00 | 30 min | 1001684890.jpg |
+| Cabelo & sobrancelha | R$ 50,00 | 30 min | 1001684892.jpg |
+| Corte social na tesoura | R$ 40,00 | 30 min | 1001684892.jpg |
+| "RAPAGEM UM PENTE SIMPLES" | R$ 30,00 | 30 min | 1001684894.jpg |
+
+**Nome a confirmar:** "RAPAGEM UM PENTE SIMPLES" parece ser uma grafia com erro ou trecho truncado. A prévia normaliza para "Raspagem um pente simples". Confirmar o nome oficial.
+
+### Planos separados
+
+| Plano | Preço | Benefícios na imagem | Validade | Captura |
+|---|---:|---|---|---|
+| mensal(barba) | R$ 99,90 | 4 modelagens de barba | 30 dias | 1001684894.jpg |
+| Plano Mensal (Corte de cabelo) | R$ 110,00 | 4 cortes | 30 dias | 1001684896.jpg |
+| Plano mensal (Premium) | R$ 199,90 | 4 cortes + 4 barbas | 30 dias | 1001684896.jpg |
+
+O InBarber apresenta "30min" nos cartões dos planos: isso **não** significa que o pacote dure 30 minutos ou que os atendimentos possam ser reservados em um único slot. Regras de adesão, pagamento, validade, consumo, cancelamento e renovação dependem da barbearia.
+
+### Implementação segura na prévia
+
+- Arquivo frontend/src/demo.ts: 23 serviços avulsos e 3 planos informativos.
+- Arquivo frontend/src/App.tsx: planos em carrossel independente com modal de detalhes; não podem gerar reserva nem cobrança.
+- Arquivo frontend/src/v6.css: barra de progresso para carrossel com catálogo maior.
+- Fotografias dos prints não foram importadas: solicitar originais e autorização para uso público.
+- A API V6 e os dados reais não foram alterados. Profissionais, escalas e horários da prévia ainda não são reais.
