@@ -2,7 +2,7 @@
 
 Projeto oficial de agendamento e gestão de barbearia. Repositório inicializado com a primeira versão executável do **fluxo de cliente mobile-first**: carrossel horizontal de serviços, seleção opcional de profissional, datas, horários e confirmação pela API local.
 
-> **Status: v0.1 / piloto local. Não publicar para clientes ainda.** Serviço, preços, equipe e horários do seed são fictícios. A demonstração pública mostra horários simulados e percorre a jornada sem coletar dados pessoais ou gerar reservas. WhatsApp, pagamento e painel administrativo ainda não foram implementados.
+> **Status: V5 frontend de demonstração + V6 API de configuração para piloto local. Não publicar reservas para clientes ainda.** Os nomes, preços e turnos iniciais são fictícios. A prévia pública continua desconectada da API. WhatsApp, pagamento e um painel web administrativo autenticado ainda não foram implementados. Existe API administrativa protegida por chave de servidor, exclusiva para configuração local de teste.
 
 ## Testar no navegador
 
@@ -19,6 +19,7 @@ Para habilitar: `Settings > Pages > Build and deployment > Deploy from a branch 
 - `frontend/`: React 19, TypeScript, Vite, CSS responsivo.
 - `backend/`: FastAPI, SQLAlchemy, SQLite em desenvolvimento; preparado para PostgreSQL por `DATABASE_URL`.
 - `docs/PLANO.md`: roteiro de implementação e critérios de aceite.
+- `docs/ADMIN_V6.md`: configuração de serviços, equipe, turnos, folgas e consultas administrativas no piloto local.
 - `.github/workflows/ci.yml`: compilação do frontend e testes do backend.
 - `.github/workflows/publish-preview.yml`: publica automaticamente a prévia React em `docs/`.
 - `docs/RELEASE_UX_V5.md`: melhorias V5, validação e limitações.
@@ -58,9 +59,9 @@ cd ../frontend && npm run build
 ## Segurança e limites atuais
 
 - API usa `BOOKING_ENABLED=false` como padrão seguro. Habilitar apenas para o piloto local.
-- **Não há verificação de telefone, rate limiting, gestão autenticada nem administração de equipe.** Antes da exposição pública, implementar essas medidas e migrações do banco.
+- Há endpoints administrativos protegidos por `ADMIN_API_KEY` de servidor, **apenas para piloto local**, ainda sem usuários individuais, painel web ou RBAC. Não existe verificação de telefone, rate limiting, auditoria completa nem migrações de produção.
 - Exibição de reserva pública não inclui nome/telefone na resposta; armazenamento pessoal existe e exige LGPD, política de retenção e operação segura.
-- Horários demonstrativos são iguais para todos os barbeiros (seg-sáb 09–18h, almoço 12–13h). Escalas reais são fase posterior.
+- O banco de demonstração novo gera escalas iguais para os barbeiros (seg-sáb 09–18h, almoço 12–13h), mas a V6 aceita escala individual, folgas e bloqueios. Dados reais permanecem pendentes.
 - Mensagens WhatsApp e pagamentos **não** são enviados.
 
 Leia [o plano completo](docs/PLANO.md) e [o plano da experiência V4](docs/PLANO_UX_V4.md) para o backlog e decisões pendentes.
