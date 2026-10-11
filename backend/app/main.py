@@ -1,16 +1,17 @@
 """Booking vertical slice. Demo schedules only; not ready for public production."""
 from __future__ import annotations
 
+import hmac
 import os
 import re
 import uuid
 from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
-from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi import Depends, FastAPI, Header, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, field_validator
-from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, String, UniqueConstraint, create_engine, select, text
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, String, UniqueConstraint, create_engine, delete, select, text
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
 
 LOCAL_TZ = ZoneInfo('America/Sao_Paulo')
@@ -48,6 +49,28 @@ class BarberService(Base):
     __tablename__ = 'barber_services'
     barber_id: Mapped[str] = mapped_column(ForeignKey('barbers.id'), primary_key=True)
     service_id: Mapped[str] = mapped_column(ForeignKey('services.id'), primary_key=True)
+
+
+class BarberShift(Base):
+    """Weekly availability; multiple shifts per weekday represent breaks."""
+    __tablename__ = 'barber_shifts'
+    __table_args__ = (UniqueConstraint('barber_id', 'weekday', 'start_minute', name='uq_barber_shift_start'),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    barber_id: Mapped[str] = mapped_column(ForeignKey('barbers.id'), index=True)
+    weekday: Mapped[int] = mapped_column(Integer)  # 0 Monday through 6 Sunday
+    start_minute: Mapped[int] = mapped_column(Integer)
+    end_minute: Mapped[int] = mapped_column(Integer)
+
+
+class BarberBlock(Base):
+    """One-off leave or blocked hours. Confirmed bookings are never silently displaced."""
+    __tablename__ = 'barber_blocks'
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    barber_id: Mapped[str] = mapped_column(ForeignKey('barbers.id'), index=True)
+    day: Mapped[date] = mapped_column(Date, index=True)
+    start_minute: Mapped[int] = mapped_column(Integer)
+    end_minute: Mapped[int] = mapped_column(Integer)
+    reason: Mapped[str] = mapped_column(String(120), default='')
 
 
 class Booking(Base):
@@ -141,6 +164,48 @@ class BookingOut(BaseModel):
     status: str
 
 
+class AdminServiceIn(BaseModel):
+    name: str = Field(min_length=2, max_length=100)
+    description: str = Field(default='', max_length=200)
+    price_cents: int = Field(ge=0, le=1_000_000)
+    duration_minutes: int = Field(ge=10, le=240)
+    image_url: str | None = Field(default=None, max_length=500)
+    active: bool = True
+
+
+class AdminBarberIn(BaseModel):
+    name: str = Field(min_length=2, max_length=100)
+    service_ids: list[str] = Field(default_factory=list)
+    active: bool = True
+
+
+class ShiftIn(BaseModel):
+    weekday: int = Field(ge=0, le=6)
+    start: str = Field(pattern=r'^([01]\d|2[0-3]):[0-5]\d$')
+    end: str = Field(pattern=r'^([01]\d|2[0-3]):[0-5]\d$')
+
+
+class BarberShiftIn(BaseModel):
+    shifts: list[ShiftIn] = Field(max_length=28)
+
+
+class BlockIn(BaseModel):
+    date: date
+    start: str = Field(pattern=r'^([01]\d|2[0-3]):[0-5]\d$')
+    end: str = Field(pattern=r'^([01]\d|2[0-3]):[0-5]\d$')
+    reason: str = Field(default='', max_length=120)
+
+
+def validate_business_id(value: str) -> None:
+    if not re.fullmatch(r'[a-z0-9][a-z0-9_-]{0,63}', value):
+        raise HTTPException(status_code=422, detail='ID inválido (use letras minúsculas, números, _ ou -).')
+
+
+def validate_interval(start: int, end: int) -> None:
+    if start < 0 or end > 24 * 60 or start >= end or start % INTERVAL != 0 or end % INTERVAL != 0:
+        raise HTTPException(status_code=422, detail='Intervalos devem ter início/fim em blocos de 30 minutos e não atravessar meia-noite.')
+
+
 def hhmm(value: int) -> str:
     return f'{value // 60:02}:{value % 60:02}'
 
@@ -171,6 +236,11 @@ def seeded(db: Session) -> None:
         for service in services:
             if barber.id != 'rafael' or service.id != 'degrade':
                 db.add(BarberService(barber_id=barber.id, service_id=service.id))
+    for barber in barbers:
+        for weekday in range(6):
+            for start, end in ((OPEN_MINUTE, LUNCH_START), (LUNCH_END, CLOSE_MINUTE)):
+                db.add(BarberShift(id=str(uuid.uuid4()), barber_id=barber.id, weekday=weekday,
+                                   start_minute=start, end_minute=end))
     db.commit()
 
 
@@ -183,26 +253,47 @@ def available_barbers(db: Session, service_id: str, barber_id: str | None) -> li
     return list(db.scalars(stmt).all())
 
 
+def available_start_times(db: Session, barber_id: str, service: Service, day: date, now: datetime) -> set[int]:
+    """Availability is derived from actual shifts, blocks and existing bookings."""
+    shifts = db.scalars(select(BarberShift).where(
+        BarberShift.barber_id == barber_id, BarberShift.weekday == day.weekday()
+    )).all()
+    if not shifts:
+        return set()
+    blocks = db.scalars(select(BarberBlock).where(
+        BarberBlock.barber_id == barber_id, BarberBlock.day == day
+    )).all()
+    existing = db.scalars(select(Booking).where(
+        Booking.barber_id == barber_id, Booking.day == day, Booking.status == 'confirmed'
+    )).all()
+    result = set()
+    for start in range(0, 24 * 60 - service.duration_minutes + 1, INTERVAL):
+        end = start + service.duration_minutes
+        if not any(shift.start_minute <= start and end <= shift.end_minute for shift in shifts):
+            continue
+        if any(block.start_minute < end and block.end_minute > start for block in blocks):
+            continue
+        if any(booking.start_minute < end and booking.end_minute > start for booking in existing):
+            continue
+        when = datetime(day.year, day.month, day.day, start // 60, start % 60, tzinfo=LOCAL_TZ)
+        if when <= now:
+            continue
+        result.add(start)
+    return result
+
+
 def slot_valid(db: Session, barber_id: str, service: Service, day: date, start: int, now: datetime) -> bool:
-    end = start + service.duration_minutes
-    if day.weekday() == 6 or start < OPEN_MINUTE or end > CLOSE_MINUTE or start % INTERVAL != 0:
-        return False
-    if start < LUNCH_END and end > LUNCH_START:
-        return False
-    start_dt = datetime(day.year, day.month, day.day, start // 60, start % 60, tzinfo=LOCAL_TZ)
-    if start_dt <= now:
-        return False
-    conflict = db.scalar(select(Booking.id).where(
-        Booking.barber_id == barber_id, Booking.day == day, Booking.status == 'confirmed',
-        Booking.start_minute < end, Booking.end_minute > start
-    ).limit(1))
-    return conflict is None
+    return start in available_start_times(db, barber_id, service, day, now)
 
 
-def create_app(database_url: str | None = None, *, booking_enabled: bool | None = None, seed_demo: bool | None = None) -> FastAPI:
+def create_app(database_url: str | None = None, *, booking_enabled: bool | None = None,
+               seed_demo: bool | None = None, admin_api_key: str | None = None) -> FastAPI:
     url = database_url or os.environ.get('DATABASE_URL', 'sqlite:///./barberia.db')
     enabled = booking_enabled if booking_enabled is not None else os.getenv('BOOKING_ENABLED', 'false').lower() == 'true'
     seed = seed_demo if seed_demo is not None else os.getenv('SEED_DEMO_DATA', 'false').lower() == 'true'
+    secret = admin_api_key if admin_api_key is not None else os.getenv('ADMIN_API_KEY', '')
+    if secret and len(secret) < 32:
+        raise ValueError('ADMIN_API_KEY precisa ter ao menos 32 caracteres aleatórios.')
     connect_args = {'check_same_thread': False, 'timeout': 30} if url.startswith('sqlite') else {}
     engine = create_engine(url, connect_args=connect_args, pool_pre_ping=True)
     Base.metadata.create_all(engine)  # Dev pilot only; replace with Alembic migrations before production.
@@ -218,6 +309,15 @@ def create_app(database_url: str | None = None, *, booking_enabled: bool | None 
     def get_db():
         with SessionLocal() as session:
             yield session
+
+    def require_admin(authorization: str | None = Header(default=None)) -> None:
+        # No fallback credentials. Disabled until a unique server-side key is configured.
+        if not secret:
+            raise HTTPException(status_code=503, detail='Administração ainda não configurada.')
+        scheme, _, supplied = (authorization or '').partition(' ')
+        if scheme.lower() != 'bearer' or not hmac.compare_digest(supplied, secret):
+            raise HTTPException(status_code=401, detail='Acesso administrativo não autorizado.',
+                                headers={'WWW-Authenticate': 'Bearer'})
 
 
     @app.get('/api/health')
@@ -255,14 +355,10 @@ def create_app(database_url: str | None = None, *, booking_enabled: bool | None 
         days = []
         for i in range(count):
             day = start + timedelta(days=i)
-            if day.weekday() == 6 or not barbers:
+            if not barbers:
                 days.append(DaySummaryOut(date=day, available=False))
                 continue
-            has_slot = any(
-                slot_valid(db, b.id, service, day, minute, now)
-                for minute in range(OPEN_MINUTE, CLOSE_MINUTE, INTERVAL)
-                for b in barbers
-            )
+            has_slot = any(available_start_times(db, b.id, service, day, now) for b in barbers)
             days.append(DaySummaryOut(date=day, available=has_slot))
         return DaysSummaryOut(days=days)
 
@@ -276,9 +372,9 @@ def create_app(database_url: str | None = None, *, booking_enabled: bool | None 
         if barber_id and not barbers:
             raise HTTPException(422, 'Profissional indisponível para este serviço.')
         now = datetime.now(LOCAL_TZ)
-        slots = [SlotOut(time=hhmm(start), barber_id=b.id)
-                 for start in range(OPEN_MINUTE, CLOSE_MINUTE, INTERVAL)
-                 if (b := next((b for b in barbers if slot_valid(db, b.id, service, date_, start, now)), None))]
+        by_barber = {b.id: available_start_times(db, b.id, service, date_, now) for b in barbers}
+        slots = [SlotOut(time=hhmm(start), barber_id=next(b.id for b in barbers if start in by_barber[b.id]))
+                 for start in sorted(set().union(*by_barber.values()))] if by_barber else []
         return AvailabilityOut(date=date_, slots=slots)
 
     @app.post('/api/bookings', response_model=BookingOut, status_code=201)
@@ -318,6 +414,132 @@ def create_app(database_url: str | None = None, *, booking_enabled: bool | None 
         except Exception:
             db.rollback()
             raise
+
+    # Admin-only configuration endpoints for the local pilot. Real production must add
+    # staff identities/RBAC, rate limiting, HTTPS and audited database migrations.
+    def lock_barber_configuration(db: Session, barber_id: str) -> None:
+        # Same locking order as public booking: serialize changes to shifts/blocks
+        # with booking creation so a confirmed appointment is never orphaned.
+        if engine.dialect.name == 'sqlite':
+            db.execute(text('BEGIN IMMEDIATE'))
+        elif engine.dialect.name == 'postgresql':
+            db.execute(select(Barber.id).where(Barber.id == barber_id).with_for_update()).first()
+
+    @app.get('/api/admin/config', dependencies=[Depends(require_admin)])
+    def get_admin_config(db: Session = Depends(get_db)):
+        services = db.scalars(select(Service).order_by(Service.name)).all()
+        barbers = db.scalars(select(Barber).order_by(Barber.name)).all()
+        pairs = db.execute(select(BarberService.barber_id, BarberService.service_id)).all()
+        shifts = db.scalars(select(BarberShift).order_by(BarberShift.barber_id, BarberShift.weekday, BarberShift.start_minute)).all()
+        blocks = db.scalars(select(BarberBlock).order_by(BarberBlock.day, BarberBlock.start_minute)).all()
+        return {
+            'services': [dict(id=s.id, name=s.name, description=s.description, price_cents=s.price_cents,
+                              duration_minutes=s.duration_minutes, image_url=s.image_url, active=s.active) for s in services],
+            'barbers': [dict(id=b.id, name=b.name, active=b.active,
+                             service_ids=[sid for bid, sid in pairs if bid == b.id]) for b in barbers],
+            'shifts': [dict(barber_id=s.barber_id, weekday=s.weekday, start=hhmm(s.start_minute), end=hhmm(s.end_minute)) for s in shifts],
+            'blocks': [dict(id=b.id, barber_id=b.barber_id, date=b.day, start=hhmm(b.start_minute),
+                            end=hhmm(b.end_minute), reason=b.reason) for b in blocks],
+        }
+
+    @app.put('/api/admin/services/{service_id}', response_model=ServiceOut, dependencies=[Depends(require_admin)])
+    def upsert_service(service_id: str, payload: AdminServiceIn, db: Session = Depends(get_db)):
+        validate_business_id(service_id)
+        value = db.get(Service, service_id)
+        if value is None:
+            value = Service(id=service_id)
+            db.add(value)
+        for attr in ('name', 'description', 'price_cents', 'duration_minutes', 'image_url', 'active'):
+            setattr(value, attr, getattr(payload, attr))
+        db.commit()
+        db.refresh(value)
+        return value
+
+    @app.put('/api/admin/barbers/{barber_id}', dependencies=[Depends(require_admin)])
+    def upsert_barber(barber_id: str, payload: AdminBarberIn, db: Session = Depends(get_db)):
+        validate_business_id(barber_id)
+        requested = set(payload.service_ids)
+        existing = set(db.scalars(select(Service.id).where(Service.id.in_(requested))).all()) if requested else set()
+        if existing != requested:
+            raise HTTPException(status_code=422, detail='Há serviços inexistentes na lista.')
+        barber = db.get(Barber, barber_id)
+        if barber is None:
+            barber = Barber(id=barber_id)
+            db.add(barber)
+        barber.name = payload.name
+        barber.active = payload.active
+        db.execute(delete(BarberService).where(BarberService.barber_id == barber_id))
+        db.flush()
+        db.add_all([BarberService(barber_id=barber_id, service_id=service_id) for service_id in sorted(requested)])
+        db.commit()
+        return {'id': barber.id, 'name': barber.name, 'active': barber.active, 'service_ids': sorted(requested)}
+
+    @app.put('/api/admin/barbers/{barber_id}/shifts', dependencies=[Depends(require_admin)])
+    def replace_shifts(barber_id: str, payload: BarberShiftIn, db: Session = Depends(get_db)):
+        lock_barber_configuration(db, barber_id)
+        if db.get(Barber, barber_id) is None:
+            raise HTTPException(status_code=404, detail='Profissional não encontrado.')
+        ranges = []
+        for s in payload.shifts:
+            start, end = minutes(s.start), minutes(s.end)
+            validate_interval(start, end)
+            ranges.append((s.weekday, start, end))
+        for day in range(7):
+            windows = sorted((start, end) for wd, start, end in ranges if wd == day)
+            if any(windows[i][0] < windows[i-1][1] for i in range(1, len(windows))):
+                raise HTTPException(status_code=422, detail='Expedientes sobrepostos para o mesmo dia.')
+        # Existing future appointments must still fit their professional's new schedule.
+        future = db.scalars(select(Booking).where(
+            Booking.barber_id == barber_id, Booking.day >= datetime.now(LOCAL_TZ).date(),
+            Booking.status == 'confirmed'
+        )).all()
+        for booking in future:
+            if not any(wd == booking.day.weekday() and start <= booking.start_minute
+                       and booking.end_minute <= end for wd, start, end in ranges):
+                raise HTTPException(status_code=409, detail='Mudança deixaria agendamentos existentes fora do expediente.')
+        db.execute(delete(BarberShift).where(BarberShift.barber_id == barber_id))
+        db.add_all([BarberShift(id=str(uuid.uuid4()), barber_id=barber_id, weekday=day,
+                                start_minute=start, end_minute=end) for day, start, end in ranges])
+        db.commit()
+        return {'barber_id': barber_id, 'shifts': payload.shifts}
+
+    @app.post('/api/admin/barbers/{barber_id}/blocks', status_code=201, dependencies=[Depends(require_admin)])
+    def create_block(barber_id: str, payload: BlockIn, db: Session = Depends(get_db)):
+        lock_barber_configuration(db, barber_id)
+        if db.get(Barber, barber_id) is None:
+            raise HTTPException(status_code=404, detail='Profissional não encontrado.')
+        start, end = minutes(payload.start), minutes(payload.end)
+        validate_interval(start, end)
+        if payload.date < datetime.now(LOCAL_TZ).date():
+            raise HTTPException(status_code=422, detail='Não é possível bloquear uma data passada.')
+        collides = db.scalar(select(Booking.id).where(
+            Booking.barber_id == barber_id, Booking.day == payload.date, Booking.status == 'confirmed',
+            Booking.start_minute < end, Booking.end_minute > start
+        ).limit(1))
+        if collides:
+            raise HTTPException(status_code=409, detail='Há reservas confirmadas no período. Reagende antes.')
+        block = BarberBlock(id=str(uuid.uuid4()), barber_id=barber_id, day=payload.date,
+                            start_minute=start, end_minute=end, reason=payload.reason)
+        db.add(block)
+        db.commit()
+        return {'id': block.id, 'barber_id': barber_id, 'date': payload.date,
+                'start': payload.start, 'end': payload.end, 'reason': payload.reason}
+
+    @app.delete('/api/admin/barbers/{barber_id}/blocks/{block_id}', status_code=204, dependencies=[Depends(require_admin)])
+    def delete_block(barber_id: str, block_id: str, db: Session = Depends(get_db)):
+        lock_barber_configuration(db, barber_id)
+        block = db.get(BarberBlock, block_id)
+        if block is None or block.barber_id != barber_id:
+            raise HTTPException(status_code=404, detail='Bloqueio não encontrado.')
+        db.delete(block)
+        db.commit()
+
+    @app.get('/api/admin/bookings', dependencies=[Depends(require_admin)])
+    def list_admin_bookings(day: date, db: Session = Depends(get_db)):
+        rows = db.scalars(select(Booking).where(Booking.day == day).order_by(Booking.start_minute)).all()
+        return {'bookings': [dict(id=b.id, barber_id=b.barber_id, service_id=b.service_id,
+                                  client_name=b.client_name, client_phone=b.client_phone,
+                                  date=b.day, time=hhmm(b.start_minute), status=b.status) for b in rows]}
 
     return app
 
