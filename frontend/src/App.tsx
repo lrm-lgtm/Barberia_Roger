@@ -109,7 +109,7 @@ export default function App() {
   useEffect(() => {
     if (step !== 'schedule' || !serviceId) return;
     if (isPreview) {
-      setAvailability({ date, slots: futureDemoSlots(date).map(time => ({ time, barber_id: barberId === 'any' ? 'roger' : barberId })) });
+      setAvailability({ date, slots: futureDemoSlots(date).map(time => ({ time, barber_id: barberId === 'any' ? 'preview' : barberId })) });
       setLoadingSlots(false);
       return;
     }
@@ -196,14 +196,14 @@ export default function App() {
         }} aria-label="Serviços disponíveis. Deslize horizontalmente.">
           {catalog.services.map((s, i) => <button type="button" className={`service-card service-art-${i % 4}`} key={s.id} onClick={() => selectService(s.id)} aria-label={`${s.name}, ${s.duration_minutes} minutos, ${brl(s.price_cents)}. Escolher horário.`}>
             <div className="service-photo">{s.image_url ? <img src={s.image_url} alt="" loading="lazy"/> : <div className={`graphic graphic-${serviceGraphic[i % 4]}`}><Scissors size={58} strokeWidth={0.9}/><span>{pad(i + 1)}</span></div>}
-              <span className="service-number">0{i + 1}</span><span className="service-float"><ArrowRight size={19}/></span>
+              <span className="service-number">{pad(i + 1)}</span><span className="service-float"><ArrowRight size={19}/></span>
             </div>
             <div className="service-info"><h3>{s.name}</h3><div><span><Clock3 size={13}/> {s.duration_minutes} min</span><strong>{brl(s.price_cents)}</strong></div></div>
           </button>)}
         </div>
         <div className="v5-carousel-footer"><div className="v5-progress" aria-hidden="true">{catalog.services.map((s, i) => <span key={s.id} className={serviceIndex === i ? 'active' : ''}/>)}</div><span>{serviceIndex + 1} de {catalog.services.length} · Toque para agendar</span></div>
         <div className="v5-benefit"><Check size={16}/> Sem instalar aplicativo <span>·</span> Pagamento no local</div>
-        {isPreview && <p className="v5-demo-footnote">Serviços, profissionais, preços e horários ilustrativos.</p>}
+        {isPreview && <p className="v5-demo-footnote">Catálogo e valores vistos no InBarber (out/2026), ainda a confirmar. Equipe, fotos e horários não disponíveis nesta demonstração.</p>}
       </>}
 
       {step === 'schedule' && service && <div className="v4-schedule">
@@ -234,17 +234,17 @@ export default function App() {
           {slots.length > 9 && <button className="v4-more" type="button" onClick={() => setShowMore(!showMore)}>{showMore ? 'Ver menos' : `Ver mais ${slots.length - 9} horários`}</button>}
         </>}
         {error && <p className="error" role="alert">{error}</p>}
-        <button className="v4-professional" type="button" onClick={() => setShowBarbers(true)}>
+        {eligible.length > 0 && <button className="v4-professional" type="button" onClick={() => setShowBarbers(true)}>
           <span className="v4-person-icon"><Users size={19}/></span>
-          <span><strong>{barberId === 'any' ? 'Qualquer barbeiro' : professional?.name}</strong><small>{barberId === 'any' ? 'Mais opções de horários' : 'Profissional escolhido'}</small></span>
+          <span><strong>{barberId === 'any' ? (eligible.length ? 'Qualquer barbeiro' : 'Profissionais a confirmar') : professional?.name}</strong><small>{barberId === 'any' ? 'Mais opções de horários' : 'Profissional escolhido'}</small></span>
           <span className="v4-change">Alterar <ArrowRight size={14}/></span>
-        </button>
+        </button>}
         <p className="v4-hint">Toque no horário desejado para continuar.</p>
       </div>}
 
       {step === 'identify' && service && <>
         <CompactHeader onBack={back} title={isPreview ? 'Confira sua escolha' : 'Quase lá!'} />
-        <div className="booking-summary"><span className="eyebrow">{isPreview ? 'SIMULAÇÃO DE AGENDAMENTO' : 'RESUMO DO AGENDAMENTO'}</span><h2>{service.name}</h2><div><Clock3 size={17}/> {dateFmt(date, { weekday: 'long', day: 'numeric', month: 'long' })} às {selectedTime}</div><div><UserRound size={17}/> {barberId === 'any' ? 'Primeiro profissional disponível' : professional?.name}</div><strong>{brl(service.price_cents)} <small>pagar no local</small></strong></div>
+        <div className="booking-summary"><span className="eyebrow">{isPreview ? 'SIMULAÇÃO DE AGENDAMENTO' : 'RESUMO DO AGENDAMENTO'}</span><h2>{service.name}</h2><div><Clock3 size={17}/> {dateFmt(date, { weekday: 'long', day: 'numeric', month: 'long' })} às {selectedTime}</div><div><UserRound size={17}/> {barberId === 'any' ? (eligible.length ? 'Primeiro profissional disponível' : 'Profissional não informado na prévia') : professional?.name}</div><strong>{brl(service.price_cents)} <small>pagar no local</small></strong></div>
         {isPreview ? <div className="v4-demo-review"><ShieldCheck size={25}/><strong>Esta é uma demonstração.</strong><p>Você pode experimentar a jornada sem informar nome ou telefone. Nenhum horário será reservado.</p><button type="button" className="confirm-button" onClick={() => setStep('success')}>Concluir simulação <ArrowRight size={18}/></button></div> :
           <form className="details-form" onSubmit={submitBooking}><label htmlFor="client-name">Seu nome</label><input id="client-name" required autoComplete="name" maxLength={80} minLength={2} placeholder="Nome e sobrenome" value={clientName} onChange={e => setClientName(e.target.value)}/><label htmlFor="client-phone">WhatsApp com DDD</label><input id="client-phone" required autoComplete="tel" inputMode="tel" pattern="[0-9() +\-]{10,20}" placeholder="(19) 99999-9999" value={clientPhone} onChange={e => setClientPhone(e.target.value)}/><div className="form-note"><ShieldCheck size={19}/> Usaremos seu celular para informações da reserva. A verificação de identidade será obrigatória antes da abertura pública.</div><label className="consent"><input type="checkbox" checked={marketingOptIn} onChange={e => setMarketingOptIn(e.target.checked)}/> Quero receber promoções e convites para voltar (opcional).</label>{error && <p className="error" role="alert">{error}</p>}<button className="confirm-button" disabled={submitting} type="submit">{submitting ? 'Confirmando...' : 'Confirmar agendamento'} <ArrowRight size={19}/></button></form>}
       </>}
