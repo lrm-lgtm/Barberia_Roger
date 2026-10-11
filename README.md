@@ -6,9 +6,9 @@ Projeto oficial de agendamento e gestão de barbearia. Repositório inicializado
 
 ## Testar no navegador
 
-**Testar V4 no celular (sem backend):** https://raw.githack.com/lrm-lgtm/Barberia_Roger/2d7aa572f5ca0878fbf74fe68ab10303892fb056/docs/index.html
+**Testar V5 no celular (sem backend):** https://raw.githack.com/lrm-lgtm/Barberia_Roger/83b556efb94ad03f435664f10799d12a0b3b1a2a/docs/index.html
 
-O workflow `publish-preview.yml` compila o mesmo frontend React em modo `VITE_DEMO_MODE=true` e salva os arquivos em `docs/`; assim o link de teste não usa uma interface paralela. Esse link usa um serviço externo de pré-visualização de HTML; no primeiro acesso pode aparecer uma tela de confirmação do serviço. A V4 oferece horários fictícios e simulação de conclusão sem perguntar nome/telefone, sem criar reservas, enviar WhatsApp ou processar pagamentos.
+O workflow `publish-preview.yml` compila o mesmo frontend React em modo `VITE_DEMO_MODE=true` e salva os arquivos em `docs/`; assim o link de teste não usa uma interface paralela. Esse link usa um serviço externo de pré-visualização de HTML; no primeiro acesso pode aparecer uma tela de confirmação do serviço. A V5 oferece horários fictícios e simulação de conclusão sem perguntar nome/telefone, sem criar reservas, enviar WhatsApp ou processar pagamentos.
 
 **Endereço oficial após habilitar GitHub Pages:** `https://lrm-lgtm.github.io/Barberia_Roger/`.
 
@@ -20,6 +20,8 @@ Para habilitar: `Settings > Pages > Build and deployment > Deploy from a branch 
 - `backend/`: FastAPI, SQLAlchemy, SQLite em desenvolvimento; preparado para PostgreSQL por `DATABASE_URL`.
 - `docs/PLANO.md`: roteiro de implementação e critérios de aceite.
 - `.github/workflows/ci.yml`: compilação do frontend e testes do backend.
+- `.github/workflows/publish-preview.yml`: publica automaticamente a prévia React em `docs/`.
+- `docs/RELEASE_UX_V5.md`: melhorias V5, validação e limitações.
 
 ## Como rodar localmente
 
