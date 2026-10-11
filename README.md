@@ -6,7 +6,7 @@ Projeto oficial de agendamento e gestão de barbearia. Repositório inicializado
 
 ## Testar no navegador
 
-**Testar V4 no celular (sem backend):** https://raw.githack.com/lrm-lgtm/Barberia_Roger/main/docs/index.html
+**Testar V4 no celular (sem backend):** https://raw.githack.com/lrm-lgtm/Barberia_Roger/2d7aa572f5ca0878fbf74fe68ab10303892fb056/docs/index.html
 
 O workflow `publish-preview.yml` compila o mesmo frontend React em modo `VITE_DEMO_MODE=true` e salva os arquivos em `docs/`; assim o link de teste não usa uma interface paralela. Esse link usa um serviço externo de pré-visualização de HTML; no primeiro acesso pode aparecer uma tela de confirmação do serviço. A V4 oferece horários fictícios e simulação de conclusão sem perguntar nome/telefone, sem criar reservas, enviar WhatsApp ou processar pagamentos.
 
