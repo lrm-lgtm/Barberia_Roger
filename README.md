@@ -2,13 +2,13 @@
 
 Projeto oficial de agendamento e gestão de barbearia. Repositório inicializado com a primeira versão executável do **fluxo de cliente mobile-first**: carrossel horizontal de serviços, seleção opcional de profissional, datas, horários e confirmação pela API local.
 
-> **Status: V5 frontend de demonstração + V6 API de configuração para piloto local. Não publicar reservas para clientes ainda.** Os nomes, preços e turnos iniciais são fictícios. A prévia pública continua desconectada da API. WhatsApp, pagamento e um painel web administrativo autenticado ainda não foram implementados. Existe API administrativa protegida por chave de servidor, exclusiva para configuração local de teste.
+> **Status: V5 frontend de demonstração + V6 API de configuração para piloto local. Não publicar reservas para clientes ainda.** A API local ainda possui dados fictícios de exemplo. A prévia pública agora exibe 16 serviços e valores transcritos de capturas do InBarber (outubro/2026), **ainda sujeitos a confirmação**; horários, fotos e equipe não são oficiais. A prévia continua desconectada da API. WhatsApp, pagamento e um painel web administrativo autenticado ainda não foram implementados. Existe API administrativa protegida por chave de servidor, exclusiva para configuração local de teste.
 
 ## Testar no navegador
 
-**Testar V5 no celular (sem backend):** https://raw.githack.com/lrm-lgtm/Barberia_Roger/754b4cb04a1982ea808099e6984d98b6b9afee8e/docs/index.html
+**Testar catálogo de referência no celular (sem backend):** https://raw.githack.com/lrm-lgtm/Barberia_Roger/70bc6d03181b472b9071e8acfd79ac2fb54f0d1e/docs/index.html
 
-O workflow `publish-preview.yml` compila o mesmo frontend React em modo `VITE_DEMO_MODE=true` e salva os arquivos em `docs/`; assim o link de teste não usa uma interface paralela. Esse link usa um serviço externo de pré-visualização de HTML; no primeiro acesso pode aparecer uma tela de confirmação do serviço. A V5 oferece horários fictícios e simulação de conclusão sem perguntar nome/telefone, sem criar reservas, enviar WhatsApp ou processar pagamentos.
+O workflow `publish-preview.yml` compila o mesmo frontend React em modo `VITE_DEMO_MODE=true` e salva os arquivos em `docs/`; assim o link de teste não usa uma interface paralela. Esse link usa um serviço externo de pré-visualização de HTML; no primeiro acesso pode aparecer uma tela de confirmação do serviço. A prévia oferece horários fictícios e simulação de conclusão sem perguntar nome/telefone, sem criar reservas, enviar WhatsApp ou processar pagamentos.
 
 **Endereço oficial após habilitar GitHub Pages:** `https://lrm-lgtm.github.io/Barberia_Roger/`.
 
@@ -23,6 +23,7 @@ Para habilitar: `Settings > Pages > Build and deployment > Deploy from a branch 
 - `.github/workflows/ci.yml`: compilação do frontend e testes do backend.
 - `.github/workflows/publish-preview.yml`: publica automaticamente a prévia React em `docs/`.
 - `docs/RELEASE_UX_V5.md`: melhorias V5, validação e limitações.
+- `docs/CATALOGO_REFERENCIA_INBARBER.md`: 16 serviços observados nos prints e pendências de confirmação.
 
 ## Como rodar localmente
 
