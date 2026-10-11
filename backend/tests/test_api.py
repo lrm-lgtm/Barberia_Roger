@@ -113,3 +113,128 @@ def test_availability_days_observes_booking_conflict_for_selected_barber(client)
     assert client.post('/api/bookings', json=booking_payload(day)).status_code == 201
     after = client.get('/api/availability/days', params={'service_id': 'corte', 'start': day, 'count': 1, 'barber_id': 'roger'})
     assert after.json()['days'][0]['available'] is True  # Other hours remain.
+
+ADMIN_KEY = 'roger-admin-test-only-key-32-chars-safe'
+ADMIN_HEADERS = {'Authorization': f'Bearer {ADMIN_KEY}'}
+
+
+@pytest.fixture
+def admin_client(tmp_path):
+    db = tmp_path / 'admin.db'
+    app = create_app(f'sqlite:///{db}', seed_demo=True, booking_enabled=True, admin_api_key=ADMIN_KEY)
+    with TestClient(app) as c:
+        yield c
+
+
+def test_admin_endpoints_require_a_secret_and_fail_closed(admin_client, tmp_path):
+    assert admin_client.get('/api/admin/config').status_code == 401
+    assert admin_client.get('/api/admin/config', headers={'Authorization': 'Bearer wrong'}).status_code == 401
+    assert admin_client.get('/api/admin/config', headers=ADMIN_HEADERS).status_code == 200
+    disabled = create_app(f'sqlite:///{tmp_path / "no-admin.db"}', seed_demo=True, admin_api_key='')
+    with TestClient(disabled) as c:
+        assert c.get('/api/admin/config').status_code == 503
+    with pytest.raises(ValueError):
+        create_app(f'sqlite:///{tmp_path / "weak.db"}', admin_api_key='weak')
+
+
+def test_admin_can_create_and_configure_services_and_professionals(admin_client):
+    service = {'name': 'Pezinho', 'description': 'Contorno', 'price_cents': 1500,
+               'duration_minutes': 30, 'image_url': None, 'active': True}
+    assert admin_client.put('/api/admin/services/pezinho', json=service).status_code == 401
+    added = admin_client.put('/api/admin/services/pezinho', json=service, headers=ADMIN_HEADERS)
+    assert added.status_code == 200, added.text
+    professional = {'name': 'Gabriel', 'service_ids': ['pezinho'], 'active': True}
+    added = admin_client.put('/api/admin/barbers/gabriel', json=professional, headers=ADMIN_HEADERS)
+    assert added.status_code == 200, added.text
+    current = admin_client.get('/api/catalog').json()
+    assert any(s['id'] == 'pezinho' for s in current['services'])
+    assert any(b['id'] == 'gabriel' and b['service_ids'] == ['pezinho'] for b in current['barbers'])
+    assert admin_client.put('/api/admin/barbers/oops', json={**professional, 'service_ids': ['unknown']}, headers=ADMIN_HEADERS).status_code == 422
+    assert admin_client.put('/api/admin/services/Not-Allowed', json=service, headers=ADMIN_HEADERS).status_code == 422
+
+
+def test_new_barber_is_unavailable_until_shift_is_configured(admin_client):
+    today = future_workday()
+    data = {'name': 'Novo Barbeiro', 'service_ids': ['corte'], 'active': True}
+    assert admin_client.put('/api/admin/barbers/new-barber', json=data, headers=ADMIN_HEADERS).status_code == 200
+    qs = {'service_id': 'corte', 'date': today, 'barber_id': 'new-barber'}
+    assert admin_client.get('/api/availability', params=qs).json()['slots'] == []
+    weekday = datetime.fromisoformat(today).weekday()
+    slots = {'shifts': [{'weekday': weekday, 'start': '09:00', 'end': '11:00'}]}
+    response = admin_client.put('/api/admin/barbers/new-barber/shifts', json=slots, headers=ADMIN_HEADERS)
+    assert response.status_code == 200, response.text
+    times = [s['time'] for s in admin_client.get('/api/availability', params=qs).json()['slots']]
+    assert times == ['09:00', '09:30', '10:00']
+    assert admin_client.post('/api/bookings', json=booking_payload(today, barber='new-barber', time='11:00')).status_code == 409
+
+
+def test_custom_schedule_rejects_overlap_and_preserves_confirmed_bookings(admin_client):
+    today = future_workday()
+    payload = booking_payload(today)
+    assert admin_client.post('/api/bookings', json=payload).status_code == 201
+    weekday = datetime.fromisoformat(today).weekday()
+    invalid = {'shifts': [{'weekday': weekday, 'start': '09:00', 'end': '12:00'},
+                          {'weekday': weekday, 'start': '11:00', 'end': '14:00'}]}
+    route = '/api/admin/barbers/roger/shifts'
+    assert admin_client.put(route, json=invalid, headers=ADMIN_HEADERS).status_code == 422
+    without_reserved_time = {'shifts': [{'weekday': weekday, 'start': '10:00', 'end': '18:00'}]}
+    assert admin_client.put(route, json=without_reserved_time, headers=ADMIN_HEADERS).status_code == 409
+    # The original shift still exists after rejected write.
+    slots = admin_client.get('/api/availability', params={'service_id': 'corte', 'date': today, 'barber_id': 'roger'}).json()['slots']
+    assert any(s['time'] == '10:00' for s in slots)
+
+
+def test_blocks_reject_existing_booking_and_can_be_removed(admin_client):
+    today = future_workday()
+    route = '/api/admin/barbers/roger/blocks'
+    assert admin_client.post('/api/bookings', json=booking_payload(today)).status_code == 201
+    block = {'date': today, 'start': '09:00', 'end': '10:00', 'reason': 'Folga'}
+    assert admin_client.post(route, json=block, headers=ADMIN_HEADERS).status_code == 409
+    block['start'], block['end'] = '14:00', '16:00'
+    created = admin_client.post(route, json=block, headers=ADMIN_HEADERS)
+    assert created.status_code == 201, created.text
+    slots = admin_client.get('/api/availability', params={'service_id': 'corte', 'date': today, 'barber_id': 'roger'}).json()['slots']
+    assert not any(s['time'] == '14:00' for s in slots)
+    block_id = created.json()['id']
+    assert admin_client.delete(f'{route}/{block_id}', headers=ADMIN_HEADERS).status_code == 204
+    slots = admin_client.get('/api/availability', params={'service_id': 'corte', 'date': today, 'barber_id': 'roger'}).json()['slots']
+    assert any(s['time'] == '14:00' for s in slots)
+
+
+def test_admin_can_read_bookings_but_public_endpoint_does_not_reveal_personal_data(admin_client):
+    today = future_workday()
+    created = admin_client.post('/api/bookings', json=booking_payload(today))
+    assert created.status_code == 201
+    assert 'client_phone' not in created.text
+    assert 'client_name' not in created.text
+    assert admin_client.get('/api/admin/bookings', params={'day': today}).status_code == 401
+    staff = admin_client.get('/api/admin/bookings', params={'day': today}, headers=ADMIN_HEADERS)
+    assert staff.status_code == 200
+    assert staff.json()['bookings'][0]['client_phone'] == '19999999999'
+    assert staff.json()['bookings'][0]['client_name'] == 'Cliente Teste'
+
+
+def test_admin_sunday_shift_overrides_demo_default(admin_client):
+    local_today = datetime.now(ZoneInfo('America/Sao_Paulo')).date()
+    sunday = local_today + timedelta(days=(6 - local_today.weekday()) % 7 + 7)
+    qs = {'service_id': 'corte', 'date': sunday.isoformat(), 'barber_id': 'roger'}
+    assert admin_client.get('/api/availability', params=qs).json()['slots'] == []
+    config = admin_client.get('/api/admin/config', headers=ADMIN_HEADERS).json()
+    roger_shifts = [s for s in config['shifts'] if s['barber_id'] == 'roger']
+    roger_shifts.append({'weekday': 6, 'start': '09:00', 'end': '11:00'})
+    replacement = {'shifts': [{k: s[k] for k in ('weekday', 'start', 'end')} for s in roger_shifts]}
+    assert admin_client.put('/api/admin/barbers/roger/shifts', json=replacement, headers=ADMIN_HEADERS).status_code == 200
+    assert admin_client.get('/api/availability', params=qs).json()['slots']
+
+
+def test_booking_and_block_cannot_both_succeed_for_same_slot(admin_client):
+    day = future_workday()
+    block = {'date': day, 'start': '09:00', 'end': '10:00', 'reason': 'Bloqueio concorrente'}
+    def reserve(_):
+        return admin_client.post('/api/bookings', json=booking_payload(day)).status_code
+    def block_slot(_):
+        return admin_client.post('/api/admin/barbers/roger/blocks', json=block, headers=ADMIN_HEADERS).status_code
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        jobs = [pool.submit(reserve, None), pool.submit(block_slot, None)]
+        statuses = sorted(f.result() for f in jobs)
+    assert statuses in ([201, 409], [201, 409])
