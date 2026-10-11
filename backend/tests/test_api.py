@@ -84,3 +84,32 @@ def test_concurrent_requests_only_one_reservation(client):
     with ThreadPoolExecutor(max_workers=2) as pool:
         results = list(pool.map(lambda _: client.post('/api/bookings', json=payload).status_code, range(2)))
     assert sorted(results) == [201, 409]
+
+
+def test_availability_days_returns_sunday_closed_and_workdays_open(client):
+    day = datetime.now(ZoneInfo('America/Sao_Paulo')).date() + timedelta(days=2)
+    r = client.get('/api/availability/days', params={'service_id': 'corte', 'start': day.isoformat(), 'count': 7})
+    assert r.status_code == 200, r.text
+    days = r.json()['days']
+    assert len(days) == 7
+    assert any(d['available'] for d in days)
+    assert any(not d['available'] for d in days)
+    for entry in days:
+        if datetime.fromisoformat(entry['date']).weekday() == 6:
+            assert entry['available'] is False
+
+
+def test_availability_days_rejects_invalid_range_and_barber(client):
+    day = future_workday()
+    assert client.get('/api/availability/days', params={'service_id': 'corte', 'start': day, 'count': 31}).status_code == 422
+    assert client.get('/api/availability/days', params={'service_id': 'degrade', 'start': day, 'count': 7, 'barber_id': 'rafael'}).status_code == 422
+    assert client.get('/api/availability/days', params={'service_id': 'missing', 'start': day, 'count': 7}).status_code == 404
+
+
+def test_availability_days_observes_booking_conflict_for_selected_barber(client):
+    day = future_workday()
+    before = client.get('/api/availability/days', params={'service_id': 'corte', 'start': day, 'count': 1, 'barber_id': 'roger'})
+    assert before.json()['days'][0]['available'] is True
+    assert client.post('/api/bookings', json=booking_payload(day)).status_code == 201
+    after = client.get('/api/availability/days', params={'service_id': 'corte', 'start': day, 'count': 1, 'barber_id': 'roger'})
+    assert after.json()['days'][0]['available'] is True  # Other hours remain.

@@ -97,6 +97,15 @@ class AvailabilityOut(BaseModel):
     slots: list[SlotOut]
 
 
+class DaySummaryOut(BaseModel):
+    date: date
+    available: bool
+
+
+class DaysSummaryOut(BaseModel):
+    days: list[DaySummaryOut]
+
+
 class BookingIn(BaseModel):
     service_id: str
     barber_id: str | None = None
@@ -224,6 +233,38 @@ def create_app(database_url: str | None = None, *, booking_enabled: bool | None 
         for barber_id, service_id in pairs:
             service_map.setdefault(barber_id, []).append(service_id)
         return {'services': services, 'barbers': [BarberOut(id=b.id, name=b.name, service_ids=service_map.get(b.id, [])) for b in barbers]}
+
+    @app.get('/api/availability/days', response_model=DaysSummaryOut)
+    def availability_days(
+        service_id: str,
+        start: date,
+        count: int = Query(default=30, ge=1, le=30),
+        barber_id: str | None = None,
+        db: Session = Depends(get_db),
+    ):
+        check_day(start)
+        check_day(start + timedelta(days=count - 1))
+        service = db.get(Service, service_id)
+        if not service or not service.active:
+            raise HTTPException(404, 'Serviço não encontrado.')
+        barbers = available_barbers(db, service_id, barber_id)
+        if barber_id and not barbers:
+            raise HTTPException(422, 'Profissional indisponível para este serviço.')
+        now = datetime.now(LOCAL_TZ)
+        # Summary, not reservation: the booking endpoint always rechecks conflicts.
+        days = []
+        for i in range(count):
+            day = start + timedelta(days=i)
+            if day.weekday() == 6 or not barbers:
+                days.append(DaySummaryOut(date=day, available=False))
+                continue
+            has_slot = any(
+                slot_valid(db, b.id, service, day, minute, now)
+                for minute in range(OPEN_MINUTE, CLOSE_MINUTE, INTERVAL)
+                for b in barbers
+            )
+            days.append(DaySummaryOut(date=day, available=has_slot))
+        return DaysSummaryOut(days=days)
 
     @app.get('/api/availability', response_model=AvailabilityOut)
     def availability(service_id: str, date_: date = Query(alias='date'), barber_id: str | None = None, db: Session = Depends(get_db)):

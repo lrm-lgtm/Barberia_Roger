@@ -1,4 +1,4 @@
-import type { Availability, Booking, Catalog } from './types';
+import type { Availability, Booking, Catalog, DaysResponse } from './types';
 
 async function jsonRequest<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, init);
@@ -16,6 +16,11 @@ export const api = {
     const params = new URLSearchParams({ service_id: serviceId, date });
     if (barberId !== 'any') params.set('barber_id', barberId);
     return jsonRequest<Availability>(`/api/availability?${params}`);
+  },
+  days: (serviceId: string, start: string, barberId: string, count: number, signal?: AbortSignal) => {
+    const params = new URLSearchParams({ service_id: serviceId, start, count: String(count) });
+    if (barberId !== 'any') params.set('barber_id', barberId);
+    return jsonRequest<DaysResponse>(`/api/availability/days?${params}`, { signal });
   },
   book: (values: {
     service_id: string;
