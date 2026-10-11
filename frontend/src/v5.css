@@ -1,0 +1,60 @@
+/* V5 — mobile-first: service carousel above the fold, compact schedule and calendar with real availability. */
+.v5 .site-header{height:56px;padding-inline:18px}
+.v5 .brand-icon{width:37px;height:37px;border-radius:11px}
+.v5 .brand-text strong{letter-spacing:.08em}
+.v5 .header-status{white-space:nowrap}
+.v5 .demo-banner{min-height:28px;padding:5px 18px;font-size:10px;gap:7px;background:#f6f8f1;color:#61725a;border-color:#edf2e9}
+.v5-intro{padding:23px 21px 15px}
+.v5-intro .eyebrow{font-size:10px;letter-spacing:.13em;margin-bottom:9px;display:flex;align-items:center;gap:8px}
+.v5-signal{display:inline-block;width:7px;height:7px;border-radius:50%;background:#83b182}
+.v5-intro h1{margin:0 0 8px;font-size:clamp(25px,7.5vw,36px);line-height:1.13;font-weight:800;letter-spacing:-.055em;color:#203226}
+.v5-intro h1 em{font-style:normal;color:#6d9264}
+.v5-intro p{color:#7a867d;font-size:12px;line-height:1.4;margin:0}
+.v5-carousel-title{display:flex;align-items:center;justify-content:space-between;padding:0 21px 10px}
+.v5-carousel-title strong{font-size:15px;letter-spacing:-.025em}
+.v5-carousel-title>span{font-size:10px;display:flex;align-items:center;gap:7px;letter-spacing:.14em;color:#648568;font-weight:800}
+.v5 .service-carousel{padding:2px 21px 16px;gap:14px;scroll-padding-inline:21px}
+.v5 .service-card{flex:0 0 min(62vw,234px);max-width:234px;min-width:175px;border-radius:20px;padding:6px 6px 13px;box-shadow:0 6px 18px #192c1b0e}
+.v5 .service-photo{height:clamp(130px,39vw,168px);border-radius:15px}
+.v5 .service-number{font-size:11px}
+.v5 .service-float{width:35px;height:35px}
+.v5 .graphic span{font-size:126px;bottom:-30px}
+.v5 .service-info{display:block;padding:12px 7px 0}
+.v5 .service-info h3{font-size:15px;white-space:normal;line-height:1.2;min-height:20px;margin-bottom:10px}
+.v5 .service-info div{display:flex;gap:8px;align-items:center;justify-content:space-between}
+.v5 .service-info span{font-size:11px}
+.v5 .service-info strong{font-size:13px;color:#3b6440;white-space:nowrap}
+.v5-carousel-footer{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:0 21px 17px}
+.v5-carousel-footer>span{font-size:11px;color:#819084}
+.v5-progress{display:flex;align-items:center;gap:4px}
+.v5-progress span{background:#dce5d7;width:6px;height:6px;border-radius:10px;transition:width .16s}
+.v5-progress span.active{width:23px;background:#3c6644}
+.v5-benefit{margin:0 21px;padding:14px 0;display:flex;align-items:center;gap:9px;border-top:1px solid #edf1e9;color:#5b6c5c;font-size:11px}
+.v5-benefit svg{color:#587f5b;flex-shrink:0}
+.v5-benefit>span{color:#b9c7bb}
+.v5-demo-footnote{font-size:10px;color:#9ba79a;padding:0 21px;margin:0 0 4px}
+.v5 .site-footer{padding:24px 21px 20px}
+.v5 .v4-schedule{padding-top:8px}
+.v5 .v4-nav{margin-bottom:4px}
+.v5 .v4-schedule h1{margin-bottom:8px}
+.v5 .v4-service-summary{padding-block:8px;margin-bottom:9px}
+.v5 .v4-month{margin-bottom:6px}
+.v5 .v4-day-rail{padding-bottom:8px}
+.v5 .v4-times-heading{margin:5px 20px 10px}
+.v5 .v4-professional{margin-top:13px}
+.v5 .v4-hint{margin:11px 20px 0}
+.v5 .v4-time-grid button{touch-action:manipulation}
+.v5-calendar-sheet{max-width:430px;margin:auto}
+.v5-calendar-toolbar{display:flex;justify-content:space-between;align-items:center;gap:9px;margin:20px 0 14px}
+.v5-calendar-toolbar strong{text-transform:capitalize;font-size:16px}
+.v5-calendar-toolbar button{height:40px;width:40px;border-radius:12px;background:#edf3eb;border:0;color:#2b4e31;display:grid;place-items:center}
+.v5-calendar-toolbar button:disabled{opacity:.3}
+.v5-calendar-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:5px}
+.v5-calendar-grid .v5-weekday{font-size:10px;font-weight:800;color:#869686;text-align:center;padding:7px 0}
+.v5-calendar-grid button{aspect-ratio:1;min-width:0;border:1px solid #e3eae0;background:#fff;color:#29422d;border-radius:11px;font-weight:700;font-size:13px}
+.v5-calendar-grid button.selected{background:#253c2b;color:#fff;border-color:#253c2b}
+.v5-calendar-grid button:disabled{opacity:.3;background:#f0f3ed}
+.v5-calendar-note{font-size:11px;color:#819084;line-height:1.5;margin:18px 0 0}
+@media(max-width:360px){.v5-intro{padding-top:18px}.v5 .service-card{flex-basis:66vw}.v5 .service-photo{height:145px}.v5 .demo-banner{font-size:9px}}
+@media(min-width:700px){.v5 .service-card{flex-basis:220px}.v5-intro{padding-top:27px}}
+@media(prefers-reduced-motion:reduce){.v5-progress span{transition:none}}
