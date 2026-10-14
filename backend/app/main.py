@@ -196,6 +196,28 @@ class BlockIn(BaseModel):
     reason: str = Field(default='', max_length=120)
 
 
+class BookingStatusIn(BaseModel):
+    status: str = Field(pattern=r'^(confirmed|completed|cancelled|no_show)$')
+
+
+class AdminBookingOut(BaseModel):
+    id: str
+    barber_id: str
+    barber_name: str
+    service_id: str
+    service_name: str
+    price_cents: int
+    client_name: str
+    client_phone: str
+    date: date
+    time: str
+    status: str
+
+
+def normalize_phone(raw: str) -> str:
+    return re.sub(r'\D', '', raw)
+
+
 def validate_business_id(value: str) -> None:
     if not re.fullmatch(r'[a-z0-9][a-z0-9_-]{0,63}', value):
         raise HTTPException(status_code=422, detail='ID inválido (use letras minúsculas, números, _ ou -).')
@@ -304,7 +326,7 @@ def create_app(database_url: str | None = None, *, booking_enabled: bool | None 
 
     app = FastAPI(title='Roger Barbearia API', version='0.1.0')
     origins = [x.strip() for x in os.getenv('CORS_ORIGINS', 'http://localhost:5173,http://127.0.0.1:5173').split(',') if x.strip()]
-    app.add_middleware(CORSMiddleware, allow_origins=origins, allow_methods=['GET', 'POST'], allow_headers=['Content-Type'])
+    app.add_middleware(CORSMiddleware, allow_origins=origins, allow_methods=['GET', 'POST', 'PATCH', 'PUT', 'DELETE'], allow_headers=['Content-Type', 'Authorization'])
 
     def get_db():
         with SessionLocal() as session:
@@ -536,10 +558,90 @@ def create_app(database_url: str | None = None, *, booking_enabled: bool | None 
 
     @app.get('/api/admin/bookings', dependencies=[Depends(require_admin)])
     def list_admin_bookings(day: date, db: Session = Depends(get_db)):
-        rows = db.scalars(select(Booking).where(Booking.day == day).order_by(Booking.start_minute)).all()
-        return {'bookings': [dict(id=b.id, barber_id=b.barber_id, service_id=b.service_id,
-                                  client_name=b.client_name, client_phone=b.client_phone,
-                                  date=b.day, time=hhmm(b.start_minute), status=b.status) for b in rows]}
+        rows = db.execute(select(Booking, Barber, Service)
+                          .join(Barber, Barber.id == Booking.barber_id)
+                          .join(Service, Service.id == Booking.service_id)
+                          .where(Booking.day == day).order_by(Booking.start_minute)).all()
+        return {'bookings': [admin_booking_dict(b, barber, service) for b, barber, service in rows]}
+
+    def admin_booking_dict(booking: Booking, barber: Barber, service: Service) -> dict:
+        return dict(id=booking.id, barber_id=barber.id, barber_name=barber.name,
+                    service_id=service.id, service_name=service.name, price_cents=service.price_cents,
+                    client_name=booking.client_name, client_phone=booking.client_phone,
+                    date=booking.day, time=hhmm(booking.start_minute), status=booking.status)
+
+    @app.patch('/api/admin/bookings/{booking_id}', dependencies=[Depends(require_admin)])
+    def update_booking_status(booking_id: str, payload: BookingStatusIn, db: Session = Depends(get_db)):
+        booking = db.get(Booking, booking_id)
+        if booking is None:
+            raise HTTPException(status_code=404, detail='Agendamento não encontrado.')
+        booking.status = payload.status
+        db.commit()
+        return {'id': booking.id, 'status': booking.status}
+
+    @app.get('/api/admin/dashboard', dependencies=[Depends(require_admin)])
+    def dashboard(start: date | None = None, end: date | None = None, db: Session = Depends(get_db)):
+        today = datetime.now(LOCAL_TZ).date()
+        start = start or today.replace(day=1)
+        # The internal agenda needs to show upcoming reservations by default;
+        # revenue still counts only completed visits below.
+        end = end or today + timedelta(days=HORIZON_DAYS)
+        if end < start:
+            raise HTTPException(status_code=422, detail='Período inválido.')
+        rows = db.execute(select(Booking, Barber, Service)
+                          .join(Barber, Barber.id == Booking.barber_id)
+                          .join(Service, Service.id == Booking.service_id)
+                          .where(Booking.day >= start, Booking.day <= end)
+                          .order_by(Booking.day, Booking.start_minute)).all()
+        bookings = [admin_booking_dict(b, barber, service) for b, barber, service in rows]
+        valid = [row for row in bookings if row['status'] != 'cancelled']
+        completed = [row for row in valid if row['status'] == 'completed']
+        people: dict[str, dict] = {}
+        for row in valid:
+            phone = row['client_phone']
+            person = people.setdefault(phone, {'phone': phone, 'name': row['client_name'], 'visits': 0, 'spent_cents': 0})
+            person['name'] = row['client_name']
+            person['visits'] += 1
+            if row['status'] in ('completed', 'confirmed'):
+                person['spent_cents'] += row['price_cents']
+        ranking = sorted(people.values(), key=lambda item: (-item['visits'], -item['spent_cents'], item['name'].lower()))
+        revenue = sum(row['price_cents'] for row in completed)
+        return {'period': {'start': start, 'end': end},
+                'metrics': {'appointments': len(valid), 'completed': len(completed), 'cancelled': len([r for r in bookings if r['status'] == 'cancelled']),
+                            'customers': len(people), 'revenue_cents': revenue},
+                'ranking': ranking[:20], 'bookings': bookings}
+
+    @app.get('/api/admin/customers', dependencies=[Depends(require_admin)])
+    def customers(q: str = '', db: Session = Depends(get_db)):
+        rows = db.execute(select(Booking, Service)
+                          .join(Service, Service.id == Booking.service_id)
+                          .order_by(Booking.day.desc(), Booking.start_minute.desc())).all()
+        needle = q.strip().lower()
+        grouped: dict[str, dict] = {}
+        for booking, service in rows:
+            if needle and needle not in booking.client_name.lower() and needle not in booking.client_phone:
+                continue
+            person = grouped.setdefault(booking.client_phone, {'phone': booking.client_phone, 'name': booking.client_name,
+                                                               'visits': 0, 'spent_cents': 0, 'last_visit': None})
+            person['name'] = booking.client_name
+            if booking.status != 'cancelled':
+                person['visits'] += 1
+                person['spent_cents'] += service.price_cents
+                person['last_visit'] = booking.day
+        return {'customers': sorted(grouped.values(), key=lambda item: (item['name'].lower(), item['phone']))[:100]}
+
+    @app.get('/api/admin/customers/{phone}/history', dependencies=[Depends(require_admin)])
+    def customer_history(phone: str, db: Session = Depends(get_db)):
+        phone = normalize_phone(phone)
+        rows = db.execute(select(Booking, Barber, Service)
+                          .join(Barber, Barber.id == Booking.barber_id)
+                          .join(Service, Service.id == Booking.service_id)
+                          .where(Booking.client_phone == phone)
+                          .order_by(Booking.day.desc(), Booking.start_minute.desc())).all()
+        if not rows:
+            raise HTTPException(status_code=404, detail='Cliente não encontrado.')
+        return {'customer': {'phone': phone, 'name': rows[0][0].client_name},
+                'history': [admin_booking_dict(b, barber, service) for b, barber, service in rows]}
 
     return app
 

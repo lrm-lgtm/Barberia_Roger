@@ -78,6 +78,27 @@ def test_booking_disabled_by_default(tmp_path):
         assert c.post('/api/bookings', json=booking_payload(future_workday())).status_code == 503
 
 
+def test_internal_dashboard_customers_and_status(tmp_path):
+    key = 'k' * 40
+    app = create_app(f'sqlite:///{tmp_path / "admin.db"}', seed_demo=True, booking_enabled=True, admin_api_key=key)
+    day = future_workday()
+    with TestClient(app) as c:
+        assert c.post('/api/bookings', json=booking_payload(day)).status_code == 201
+        headers = {'Authorization': f'Bearer {key}'}
+        dashboard = c.get('/api/admin/dashboard', headers=headers)
+        assert dashboard.status_code == 200
+        assert dashboard.json()['metrics']['customers'] == 1
+        assert dashboard.json()['ranking'][0]['phone'] == '19999999999'
+        customers = c.get('/api/admin/customers?q=Cliente', headers=headers)
+        assert customers.status_code == 200
+        assert customers.json()['customers'][0]['visits'] == 1
+        booking = c.get('/api/admin/bookings', params={'day': day}, headers=headers).json()['bookings'][0]
+        assert booking['service_name'] == 'Corte clássico'
+        assert c.patch(f"/api/admin/bookings/{booking['id']}", json={'status': 'completed'}, headers=headers).status_code == 200
+        assert c.get('/api/admin/dashboard', headers=headers).json()['metrics']['revenue_cents'] == 4500
+        assert c.get('/api/admin/customers/19999999999/history', headers=headers).json()['history'][0]['status'] == 'completed'
+
+
 def test_concurrent_requests_only_one_reservation(client):
     day = future_workday()
     payload = booking_payload(day, barber='roger')
